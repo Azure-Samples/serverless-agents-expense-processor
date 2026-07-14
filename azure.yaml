@@ -1,0 +1,8 @@
+name: serverless-expense-agent
+metadata:
+  template: serverless-expense-agent@1.0.0
+services:
+  api:
+    project: ./src
+    language: python
+    host: function

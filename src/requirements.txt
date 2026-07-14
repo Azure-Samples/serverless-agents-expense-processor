@@ -1,0 +1,9 @@
+# Standalone Azure Functions serverless agents runtime + optional Azure Monitor exporter.
+# The distribution is azurefunctions-agents-runtime; the import package is azure_functions_agents.
+azurefunctions-agents-runtime[monitor]==0.1.0b6
+
+# Queue routing is handled by the Azure Queues connector (built-in MCP tool
+# azurequeues_PutMessage_V2), so the function itself needs no storage SDK. The demo helper
+# scripts (scripts/send_expense.py, scripts/read_decision.py) declare their own deps in
+# scripts/requirements.txt.
+

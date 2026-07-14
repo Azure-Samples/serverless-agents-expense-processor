@@ -1,0 +1,28 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+
+    "//": "Local Azurite storage — provides the expense-requests trigger queue.",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "//model": "Point at any Azure OpenAI / Foundry deployment you can reach. Leave the API key",
+    "//model2": "empty to authenticate with Entra ID (DefaultAzureCredential + `az login`).",
+    "AZURE_FUNCTIONS_AGENTS_PROVIDER": "azure_openai",
+    "AZURE_OPENAI_ENDPOINT": "https://<your-openai-account>.openai.azure.com/",
+    "AZURE_OPENAI_DEPLOYMENT": "<your-deployment-name>",
+    "AZURE_OPENAI_API_KEY": "",
+
+    "//output": "Routing to the output queues uses the Azure Queues connector (an MCP tool) that is",
+    "//output2": "configured only in the cloud. Locally the tool is absent, so the agent just returns the",
+    "//output3": "decision JSON (visible in the func host logs). OUTPUT_STORAGE_ACCOUNT is passed to the",
+    "//output4": "connector tool in the cloud and is unused locally.",
+    "OUTPUT_STORAGE_ACCOUNT": "localdev",
+
+    "//logs": "Include the agent's full response text in the host logs so the decision is visible.",
+    "ENABLE_SENSITIVE_DATA": "true",
+
+    "AZURE_FUNCTIONS_AGENTS_REASONING_EFFORT": "medium",
+    "AZURE_FUNCTIONS_AGENTS_REASONING_SUMMARY": "concise"
+  }
+}

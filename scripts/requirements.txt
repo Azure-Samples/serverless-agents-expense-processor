@@ -1,0 +1,3 @@
+# Dependencies for the local demo/helper scripts (send_expense.py, read_decision.py).
+azure-storage-queue>=12.9
+azure-identity>=1.16
