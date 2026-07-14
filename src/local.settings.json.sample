@@ -13,10 +13,10 @@
     "AZURE_OPENAI_DEPLOYMENT": "<your-deployment-name>",
     "AZURE_OPENAI_API_KEY": "",
 
-    "//output": "Routing to the output queues uses the Azure Queues connector (an MCP tool) that is",
-    "//output2": "configured only in the cloud. Locally the tool is absent, so the agent just returns the",
-    "//output3": "decision JSON (visible in the func host logs). OUTPUT_STORAGE_ACCOUNT is passed to the",
-    "//output4": "connector tool in the cloud and is unused locally.",
+    "//output": "The route_expense_decision tool writes decisions to the destination queues. Locally it",
+    "//output2": "uses this AzureWebJobsStorage connection string to write to Azurite; in the cloud it",
+    "//output3": "authenticates with the Function app's managed identity. OUTPUT_STORAGE_ACCOUNT is only a",
+    "//output4": "fallback queue-endpoint hint for that cloud managed-identity path and is unused locally.",
     "OUTPUT_STORAGE_ACCOUNT": "localdev",
 
     "//logs": "Include the agent's full response text in the host logs so the decision is visible.",

@@ -1,7 +1,7 @@
 // Creates the input and per-outcome output queues used by the expense processor.
 // The input queue (expense-requests) MUST exist for the queue trigger to bind. The three
 // output queues (expense-approved / expense-review / expense-flagged) are pre-created here so
-// the routing connector always has a valid destination for every decision.
+// the routing tool always has a valid destination for every decision.
 param storageAccountName string
 
 @description('Queue names to create in the storage account (input + per-outcome output queues).')

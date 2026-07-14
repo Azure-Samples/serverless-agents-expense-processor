@@ -52,7 +52,7 @@ param reasoningEffort string = 'medium'
 ])
 param reasoningSummary string = 'concise'
 
-@description('Object ID of the user/principal running the deployment. Used to (a) grant Storage Queue Data Message Sender so the interactive queue-connector sign-in can enqueue routed decisions, and (b) allow that user to authorize/use the queue connection. Populated by azd from AZURE_PRINCIPAL_ID.')
+@description('Object ID of the user/principal running the deployment. Granted Storage Queue Data Contributor so the demo scripts (scripts/send_expense.py, scripts/read_decision.py) can send test requests to the input queue and read routed decisions from the output queues. Populated by azd from AZURE_PRINCIPAL_ID.')
 param principalId string = ''
 
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -62,7 +62,6 @@ var functionAppName = '${abbrs.webSitesFunctions}expense-agent-${resourceToken}'
 var foundryAccountName = 'cog-${resourceToken}'
 var foundryProjectName = '${foundryAccountName}-proj'
 var deploymentStorageContainerName = 'app-package-${take(functionAppName, 32)}-${take(toLower(uniqueString(functionAppName, resourceToken)), 7)}'
-var connectorGatewayName = 'cg-${resourceToken}'
 
 var inputQueueName = 'expense-requests'
 var outputQueueNames = [
@@ -146,13 +145,10 @@ module api './app/api.bicep' = {
       AZURE_FUNCTIONS_AGENTS_REASONING_EFFORT: reasoningEffort
       AZURE_FUNCTIONS_AGENTS_REASONING_SUMMARY: reasoningSummary
       AZURE_CLIENT_ID: apiUserAssignedIdentity.outputs.clientId
+      // route_expense_decision (src/tools/route_decision.py) writes decisions to the output
+      // queues via the Azure Queue Storage SDK, authenticating with this managed identity
+      // (AZURE_CLIENT_ID). OUTPUT_STORAGE_ACCOUNT is the fallback queue-endpoint hint.
       OUTPUT_STORAGE_ACCOUNT: storage.outputs.name
-      // Queue routing connector (built-in MCP tool azurequeues_PutMessage_V2). The MCP
-      // server URL is produced by the connector gateway; the agent authenticates to it
-      // with the function's managed identity (QUEUE_MCP_CLIENT_ID). The agent passes the
-      // storage account name (OUTPUT_STORAGE_ACCOUNT) + destination queue to the tool.
-      QUEUE_MCP_SERVER_URL: connectorGateway.outputs.mcpServerUrl
-      QUEUE_MCP_CLIENT_ID: apiUserAssignedIdentity.outputs.clientId
       ENABLE_MULTIPLATFORM_BUILD: 'true'
       PYTHON_ENABLE_INIT_INDEXING: '1'
     }
@@ -206,22 +202,9 @@ module rbac './app/rbac.bicep' = {
     storageAccountName: storage.outputs.name
     appInsightsName: monitoring.outputs.name
     managedIdentityPrincipalId: apiUserAssignedIdentity.outputs.principalId
-    // The interactive queue connector enqueues as the authorizing user, so that user
-    // needs Storage Queue Data Message Sender to route decisions.
-    authorizerPrincipalId: principalId
-  }
-}
-
-// Azure Queues routing connector exposed to the agent as a built-in MCP tool.
-module connectorGateway './app/connector-gateway.bicep' = {
-  name: 'connectorGateway'
-  scope: rg
-  params: {
-    connectorGatewayName: connectorGatewayName
-    location: location
-    tags: tags
-    functionPrincipalId: apiUserAssignedIdentity.outputs.principalId
-    authorizerPrincipalId: principalId
+    // Grant the deployer data-plane queue access so the demo scripts can send test
+    // requests to the input queue and read decisions from the output queues.
+    developerPrincipalId: principalId
   }
 }
 
@@ -257,6 +240,3 @@ output FOUNDRY_PROJECT_ENDPOINT string = foundry.outputs.projectEndpoint
 output FOUNDRY_MODEL string = foundry.outputs.modelDeploymentName
 output OUTPUT_STORAGE_ACCOUNT string = storage.outputs.name
 output INPUT_QUEUE_NAME string = inputQueueName
-output QUEUE_MCP_SERVER_URL string = connectorGateway.outputs.mcpServerUrl
-output ROUTE_QUEUE_CONNECTION_NAME string = connectorGateway.outputs.connectionName
-output CONNECTOR_GATEWAY_NAME string = connectorGateway.outputs.gatewayName

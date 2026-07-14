@@ -39,8 +39,8 @@ This sample replaces that with a single **markdown-defined agent**. A message la
    (payments, a human reviewer, a fraud check) can consume.
 
 It runs on **Azure Functions Flex Consumption**, so it scales to zero and costs nothing when the
-queue is empty, and it uses a **built-in connector** for the output — no storage SDK code in the
-app at all.
+queue is empty, and it routes each decision with a small **custom tool** that writes to the output
+queue using the app's **managed identity** — no keys, no connection strings.
 
 ---
 
@@ -48,11 +48,25 @@ app at all.
 
 ```mermaid
 flowchart LR
-    msg([raw message<br/>text · JSON · key-value]) -->|any format| inq[[expense-requests queue]]
-    inq -->|queue trigger| agent{{Expense Processor agent<br/>extract · categorize · apply policy}}
-    agent -->|MCP tool| approved[[expense-approved]]
-    agent -->|MCP tool| review[[expense-review]]
-    agent -->|MCP tool| flagged[[expense-flagged]]
+    msg([raw message<br/>text · JSON · key-value])
+
+    subgraph inbound["Azure Queue Storage · inbound"]
+        inq[[expense-requests]]
+    end
+
+    agent{{Expense Processor agent<br/>extract · categorize · apply policy}}
+
+    subgraph outbound["Azure Queue Storage · outbound"]
+        approved[[expense-approved]]
+        review[[expense-review]]
+        flagged[[expense-flagged]]
+    end
+
+    msg -->|any format| inq
+    inq -->|queue trigger| agent
+    agent -->|tool call| approved
+    agent -->|tool call| review
+    agent -->|tool call| flagged
 ```
 
 The entire agent is defined declaratively in
@@ -65,7 +79,8 @@ rules engine, and no storage code; the agent does the work in five steps:
    describe a number).
 2. **Decide** — apply the policy rules below, in order; the first match wins.
 3. **Build** — assemble a compact decision JSON.
-4. **Route** — call one connector tool to enqueue the decision on the destination queue.
+4. **Route** — call the `route_expense_decision` tool to enqueue the decision on the destination
+   queue.
 5. **Respond** — return the decision JSON so the outcome is visible in the logs and traces.
 
 ### The policy
@@ -98,20 +113,18 @@ The agent extracts the details and produces:
 (policy beats the amount), `480 EUR` is **routed** for FX review, and a message with no number is
 **flagged** for clarification — all from the same agent, driven by what it reads.
 
-### Routing: a connector, not code
+### Routing: managed identity, not keys
 
-The agent routes each decision by calling the **Azure Queues connector** as an MCP tool — a built-in
-*Put a message on a queue* action exposed to the agent. There is **no SDK routing code** in the app;
-the whole output path is a one-time-authorized connector.
+The agent routes each decision by calling one custom tool,
+**[`route_expense_decision`](src/tools/route_decision.py)**, which writes the message to the
+destination queue with the Azure Queue Storage SDK. In the cloud the tool authenticates with the
+Function app's **user-assigned managed identity** (`DefaultAzureCredential`) — the same identity the
+trigger uses. That identity holds **Storage Queue Data Contributor** on the storage account, so the
+write needs **no keys and no connection strings**. The account keeps **shared-key access disabled**
+(`allowSharedKeyAccess: false`), and the tool still works because every call is Entra-authenticated.
 
-The connector authenticates with **delegated OAuth**: you sign the connection in once (see
-[Deploy](#deploy-to-azure)) and it writes as that Entra identity. The storage account has
-**shared-key access disabled** (`allowSharedKeyAccess: false`), so this token-based path is the
-compliant, secret-free way to write — no keys, no connection strings.
-
-> **Where routing happens.** The routing connector is configured in Azure. Anywhere the connector
-> isn't present, the agent still runs and *returns* the decision JSON — it just doesn't enqueue it.
-> In the deployed app, the decision lands in the correct queue.
+> Locally the same tool writes to the Azurite queues using the development connection string, so the
+> agent behaves identically end to end without any cloud dependency.
 
 ---
 
@@ -123,15 +136,13 @@ compliant, secret-free way to write — no keys, no connection strings.
 - **Microsoft Foundry** account + project + a `gpt-5.4` model deployment
 - **Storage account** — the `expense-requests` input queue and the `expense-approved` /
   `expense-review` / `expense-flagged` output queues
-- **User-assigned managed identity** + RBAC — Storage Queue Data Contributor (so the trigger can
-  read the input queue), Foundry access, and an access policy on the connector so the app can invoke
-  the routing tool
-- **Connectors Namespace** (`Microsoft.Web/connectorGateways`) exposing the built-in **Azure Queues**
-  connector used for routing
+- **User-assigned managed identity** + RBAC — **Storage Queue Data Contributor** on the storage
+  account (the trigger reads the input queue; the `route_expense_decision` tool writes the output
+  queues) plus Foundry access. The deploying user is also granted **Storage Queue Data Contributor**
+  so the demo scripts can send requests and read decisions out of the box.
 
 Key values are printed as `azd` outputs and saved to `.azure/<env>/.env` (for example
-`OUTPUT_STORAGE_ACCOUNT`, `QUEUE_MCP_SERVER_URL`, `ROUTE_QUEUE_CONNECTION_NAME`,
-`CONNECTOR_GATEWAY_NAME`).
+`OUTPUT_STORAGE_ACCOUNT`, `AZURE_FUNCTION_NAME`, and `INPUT_QUEUE_NAME`).
 
 ---
 
@@ -140,13 +151,14 @@ Key values are printed as `azd` outputs and saved to `.azure/<env>/.env` (for ex
 ```
 src/
   expense_processor.agent.md   # the agent: extract -> apply policy -> route (the star of the show)
-  mcp.json                     # registers the Azure Queues routing MCP server
+  tools/
+    route_decision.py          # custom tool: writes the decision to a queue via managed identity
   function_app.py              # entry point + a small runtime compatibility shim (see below)
   agents.config.yaml           # runtime defaults (timeout)
   host.json                    # queue messageEncoding + logging config
-  requirements.txt             # function app dependencies (just the runtime — no storage SDK)
+  requirements.txt             # function app dependencies (runtime + Azure Queue Storage SDK)
   local.settings.json.sample   # app settings reference
-infra/                         # azd / Bicep: Functions, Foundry, storage+queues, Queues connector, RBAC
+infra/                         # azd / Bicep: Functions, Foundry, storage + queues, managed identity, RBAC
 scripts/
   send_expense.py              # enqueue a request against the deployed account (Entra ID / --cloud)
   read_decision.py             # read decisions from the output queues (--cloud)
@@ -162,8 +174,8 @@ azure.yaml                     # azd service definition
 
 ### Prerequisites
 
-- An **Azure subscription** with permission to create Functions, Storage, Microsoft Foundry, and a
-  connector gateway
+- An **Azure subscription** with permission to create Functions, Storage, and Microsoft Foundry
+  resources
 - [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) (`azd`)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) — signed in with `az login`
 - [Python 3.8+](https://www.python.org/downloads/) — only for the `scripts/` send/read helpers (you
@@ -179,33 +191,13 @@ azd up
 `azd up` provisions the resources listed in [What gets deployed](#what-gets-deployed) and deploys the
 app. It prompts for an environment name, subscription, and region on first run.
 
-### 2. Authorize the routing connection (one-time)
+### 2. Send a request and read the decision
 
-Routing writes through the Azure Queues connector, which uses delegated OAuth — so the connection
-needs a single interactive sign-in (it can't be automated):
-
-1. Go to **[connectors.azure.com](https://connectors.azure.com)** → open the `cg-*` gateway → the
-   **`queue-route`** connection → **Authorize**.
-2. Sign in with an account that holds **Storage Queue Data Message Sender** (or Contributor) on the
-   storage account. `azd` already grants that role to whoever ran the deploy, so signing in as
-   yourself works.
-
-The connection flips from `Unauthenticated` to authorized and the agent starts enqueuing decisions.
-Until then the agent still runs and returns the decision JSON, but nothing lands in the output queues.
-
-### 3. Send a request and read the decision
-
-The helper scripts talk to the deployed account over **Entra ID** (no keys). The `--cloud` flag
-auto-resolves the account from your `azd` env:
+The helper scripts talk to the deployed account over **Entra ID** (no keys). `azd` already granted
+your identity **Storage Queue Data Contributor** on the storage account during deploy, so you can send
+and read right away. The `--cloud` flag auto-resolves the account from your `azd` env:
 
 ```bash
-# One-time: grant your own identity the queue roles (send to input, read outputs)
-ACCT=$(azd env get-value OUTPUT_STORAGE_ACCOUNT)
-ME=$(az ad signed-in-user show --query id -o tsv)
-SCOPE=$(az storage account show -n "$ACCT" --query id -o tsv)
-az role assignment create --assignee "$ME" --scope "$SCOPE" --role "Storage Queue Data Message Sender"
-az role assignment create --assignee "$ME" --scope "$SCOPE" --role "Storage Queue Data Message Processor"
-
 # Install the helper-script deps once
 pip install -r scripts/requirements.txt
 
@@ -215,7 +207,7 @@ python scripts/send_expense.py --file samples/cash-advance.txt     --cloud   # $
 python scripts/send_expense.py --file samples/foreign-currency.txt --cloud   # EUR  -> route (FX)
 python scripts/send_expense.py "lunch with the team ran about $45" --cloud   # inline text -> approve
 
-# Wait ~60–90s for the agent + connector, then peek all three decision queues
+# Wait ~30–60s for the agent to run, then peek all three decision queues
 python scripts/read_decision.py --queue all --peek --cloud
 ```
 
@@ -223,6 +215,7 @@ Change the amount (or the wording) and watch the decision follow. Prefer the `az
 scripts are only a convenience:
 
 ```bash
+ACCT=$(azd env get-value OUTPUT_STORAGE_ACCOUNT)
 az storage message put  --account-name "$ACCT" --queue-name expense-requests \
   --content "Team lunch at Olive Garden, about \$45" --auth-mode login
 az storage message peek --account-name "$ACCT" --queue-name expense-approved --auth-mode login
@@ -247,13 +240,13 @@ The project sends **raw text** (not base64) so messages are human-readable in th
 
 ## Troubleshooting
 
-- **Output queues stay empty** → the `queue-route` connection isn't authorized yet. Authorize it at
-  [connectors.azure.com](https://connectors.azure.com) (see
-  [step 2](#2-authorize-the-routing-connection-one-time)). Also confirm the app deployed and check
-  the function logs / Application Insights for the agent run and any routing-tool error.
-- **`403` from the scripts against the account** → you're missing the Storage Queue data roles;
-  grant *Message Sender* (send) and *Message Processor* or *Data Reader* (read). RBAC can take a few
-  minutes to propagate.
+- **Output queues stay empty** → check the function logs / Application Insights for the agent run and
+  any `route_expense_decision` error. Confirm the app deployed and that the managed identity has
+  **Storage Queue Data Contributor** on the storage account (RBAC can take a few minutes to propagate
+  after deploy).
+- **`403` from the scripts against the account** → your identity is missing **Storage Queue Data
+  Contributor** on the account. `azd` grants it to the deployer, but role propagation can take a few
+  minutes.
 - **`DeploymentNotFound` / model errors** → the Foundry model deployment isn't ready or the app
   settings don't point at it; check the `azd` outputs and the Function App configuration.
 

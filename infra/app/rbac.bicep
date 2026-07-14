@@ -2,14 +2,13 @@ param storageAccountName string
 param appInsightsName string
 param managedIdentityPrincipalId string
 
-@description('Object ID of the user who authorizes the interactive queue connector. Granted Storage Queue Data Message Sender so the connector can enqueue routed decisions as that user. Empty = skip.')
-param authorizerPrincipalId string = ''
+@description('Object ID of the user running the deployment (the developer). Granted Storage Queue Data Contributor so the demo scripts can send test requests and read routed decisions. Empty = skip.')
+param developerPrincipalId string = ''
 
 var storageRoleDefinitionId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b' // Storage Blob Data Owner
 var queueRoleDefinitionId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88' // Storage Queue Data Contributor
 var tableRoleDefinitionId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3' // Storage Table Data Contributor
 var monitoringRoleDefinitionId = '3913510d-42f4-4e42-8a64-420c390055eb' // Monitoring Metrics Publisher
-var queueSenderRoleDefinitionId = 'c6a89b2d-59bc-44d0-9896-0f6e12d7b80a' // Storage Queue Data Message Sender
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' existing = {
   name: storageAccountName
@@ -59,14 +58,15 @@ resource appInsightsRoleAssignment 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
-// The interactive Azure Queues connector enqueues routed decisions as the authorizing
-// user, so that user needs data-plane message-send access to the storage account.
-resource authorizerQueueRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(authorizerPrincipalId)) {
-  name: guid(storageAccount.id, authorizerPrincipalId, queueSenderRoleDefinitionId)
+// The demo scripts run as the deploying user: send_expense.py enqueues test requests on the input
+// queue and read_decision.py peeks/dequeues the output queues. Storage Queue Data Contributor covers
+// both, so the sample works out of the box even with allowSharedKeyAccess:false.
+resource developerQueueRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(developerPrincipalId)) {
+  name: guid(storageAccount.id, developerPrincipalId, queueRoleDefinitionId)
   scope: storageAccount
   properties: {
-    roleDefinitionId: resourceId('Microsoft.Authorization/roleDefinitions', queueSenderRoleDefinitionId)
-    principalId: authorizerPrincipalId
+    roleDefinitionId: resourceId('Microsoft.Authorization/roleDefinitions', queueRoleDefinitionId)
+    principalId: developerPrincipalId
     principalType: 'User'
   }
 }

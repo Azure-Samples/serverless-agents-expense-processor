@@ -2,7 +2,8 @@
 """Drop an expense/order request (free text or JSON) on the expense-requests queue.
 
 By default it targets local Azurite (AzureWebJobsStorage=UseDevelopmentStorage=true),
-so it works fully offline while `func start` is running.
+so enqueuing needs no cloud resources. (The agent that then processes the message from
+the queue still calls your configured Azure OpenAI / Foundry model to reason over it.)
 
 Examples
 --------

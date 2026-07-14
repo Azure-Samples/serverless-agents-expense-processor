@@ -66,16 +66,15 @@ Assemble one compact JSON object from what you extracted and decided:
 
 ### 4. Route
 
-Call the **`azurequeues_PutMessage_V2`** tool exactly once with:
+Call the **`route_expense_decision`** tool exactly once with:
 
-- `storageAccountName`: `$OUTPUT_STORAGE_ACCOUNT`
-- `queueName`: the destination queue chosen in step 2 (`expense-approved`, `expense-review`, or
+- `queue_name`: the destination queue chosen in step 2 (`expense-approved`, `expense-review`, or
   `expense-flagged`)
 - `message`: the decision JSON string from step 3
 
-This routes the decision through the Azure Queues connector (a built-in MCP tool). The tool is only
-present when the connector is configured, so on local runs it will be absent — in that case skip
-this step and continue. Never fail the request because the routing tool is missing or errors.
+The tool writes the decision to Azure Queue Storage using the Function app's managed identity. If the
+tool reports an error, continue anyway and still return the decision — never fail the request because
+routing failed.
 
 ### 5. Respond
 
@@ -93,5 +92,5 @@ Return the decision JSON from step 3 as your final response so the outcome is vi
 - Keep `reason` to a single short sentence that names the amount or category and the rule that
   applied.
 - Call the routing tool at most once, then stop.
-- Always return the decision JSON as your final answer, even if the routing tool is unavailable or
-  reports an error — the decision itself is the proof.
+- Always return the decision JSON as your final answer, even if the routing tool reports an error —
+  the decision itself is the proof.
