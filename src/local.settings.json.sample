@@ -7,7 +7,7 @@
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
 
     "//model": "Point at any Azure OpenAI / Foundry deployment you can reach. Leave the API key",
-    "//model2": "empty to authenticate with Entra ID (DefaultAzureCredential + `az login`).",
+    "//model2": "empty to authenticate with Entra ID through DefaultAzureCredential.",
     "AZURE_FUNCTIONS_AGENTS_PROVIDER": "azure_openai",
     "AZURE_OPENAI_ENDPOINT": "https://<your-openai-account>.openai.azure.com/",
     "AZURE_OPENAI_DEPLOYMENT": "<your-deployment-name>",

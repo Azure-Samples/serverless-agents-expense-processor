@@ -27,9 +27,9 @@ Examples
     uv run scripts/send_expense.py --amount 45
     uv run scripts/send_expense.py --amount 5000
 
-    # Against the DEPLOYED account (Entra ID) — auto-resolves the queue endpoint from your
-    # azd env (OUTPUT_STORAGE_ACCOUNT). Requires `az login`; the signed-in user needs the
-    # "Storage Queue Data Message Sender" (or Contributor) role on the account.
+    # Against the DEPLOYED account (Entra ID), auto-resolves the queue endpoint from your
+    # azd env (OUTPUT_STORAGE_ACCOUNT). The identity used by azd needs the "Storage Queue
+    # Data Message Sender" (or Contributor) role on the account.
     uv run scripts/send_expense.py --amount 250 --cloud
 
     # Or point at a specific account explicitly:

@@ -20,9 +20,9 @@ Examples
     # Peek ALL three decision queues at once (handy right after sending a batch):
     uv run scripts/read_decision.py --queue all --peek
 
-    # Against the DEPLOYED account (Entra ID) — auto-resolves the queue endpoint from your
-    # azd env (OUTPUT_STORAGE_ACCOUNT). Requires `az login`; the signed-in user needs the
-    # "Storage Queue Data Reader" (peek) or "Message Processor" (receive+delete) role.
+    # Against the DEPLOYED account (Entra ID), auto-resolves the queue endpoint from your
+    # azd env (OUTPUT_STORAGE_ACCOUNT). The identity used by azd needs the "Storage Queue
+    # Data Reader" (peek) or "Message Processor" (receive+delete) role.
     uv run scripts/read_decision.py --queue all --peek --cloud
 
     # Print the original queue payloads instead of the readable summary:

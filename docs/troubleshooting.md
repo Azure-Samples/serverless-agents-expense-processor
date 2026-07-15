@@ -36,8 +36,8 @@ cold start or RBAC lag right after deploy can skip it without failing the deploy
 Local Azurite covers the queues and policy blobs, but the agent still calls an Azure OpenAI / Foundry
 model. Copy [`src/local.settings.json.sample`](../src/local.settings.json.sample) to
 `src/local.settings.json` and set `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` (leave the API
-key empty to authenticate with `az login`). Running `azd provision` once creates a Foundry deployment
-you can point at.
+key empty to use `DefaultAzureCredential`). Running `azd provision` once creates a Foundry deployment
+and establishes an `azd` credential you can use locally.
 
 ## `uv run func start` fails to import the runtime
 

@@ -8,15 +8,12 @@ and drops three sample requests on the queue so you see decisions immediately.
 - An **Azure subscription** with permission to create Functions, Storage, and Microsoft Foundry
   resources.
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
-- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli): signed in with `az login`
-  (the seed/demo-send hooks and the helper scripts use it).
 - [uv](https://docs.astral.sh/uv/): the `prepackage` hook runs `uv export` to generate
-  `requirements.txt` for the Functions build, and the helper scripts run with `uv run`.
+  `requirements.txt`, and the deployment hooks and helper scripts run with `uv run`.
 
 ## Provision and deploy
 
 ```bash
-azd auth login
 azd up
 ```
 
@@ -60,9 +57,10 @@ Key values are printed as `azd` outputs and saved to `.azure/<env>/.env` (for ex
 
 ## Auto-seeding and the demo send
 
-Two hooks in [`azure.yaml`](../azure.yaml) mean a fresh deploy works out of the box with nothing to
-run by hand. Both use the `az` CLI (no Python packages) over the deployer's Entra identity, and both
-are best-effort (`continueOnError`) because the runtime is a guaranteed fallback:
+Two hooks in [`azure.yaml`](../azure.yaml) call
+[`scripts/setup_demo.py`](../scripts/setup_demo.py) so a fresh deploy works without a manual setup
+step. The helper uses `DefaultAzureCredential`, including the identity established by `azd`, and both
+hooks are best-effort (`continueOnError`) because the runtime is a guaranteed fallback:
 
 - **`postprovision`: seed policies.** Uploads [`src/policies/*.md`](../src/policies/) into the
   `policies` container. It seeds **only when the container is empty**, so re-provisioning never
@@ -81,15 +79,6 @@ auto-resolves the account from your `azd` env:
 ```bash
 uv run scripts/send_expense.py --file samples/travel.txt --cloud
 uv run scripts/read_decision.py --queue all --peek --cloud
-```
-
-Prefer the `az` CLI directly? The scripts are only a convenience:
-
-```bash
-ACCT=$(azd env get-value OUTPUT_STORAGE_ACCOUNT)
-az storage message put  --account-name "$ACCT" --queue-name expense-requests \
-  --content "Booked a \$450 round-trip flight to Denver" --auth-mode login
-az storage message peek --account-name "$ACCT" --queue-name expense-approved --auth-mode login
 ```
 
 ## Clean up

@@ -19,79 +19,28 @@ services:
           shell: pwsh
           continueOnError: false
           run: uv export --format requirements-txt --no-hashes --no-dev --no-emit-project -o requirements.txt
-# After the storage account is provisioned, upload the bundled policy documents to the
-# `policies` blob container so they're present right after `azd up` — the customer never
-# runs a manual seed step. Implemented with the az CLI (already required for this sample)
-# so the hook needs no Python packages. It seeds only when the container is empty, so a
-# re-provision never overwrites an operator's edited policy, and continueOnError keeps an
-# RBAC-propagation hiccup from failing the deploy (the agent also seeds lazily on its first
-# run, so the policies are guaranteed either way).
+# Seed policies and submit demo messages with the Azure SDK. DefaultAzureCredential
+# uses the identity established by azd, so Azure CLI is not required.
 hooks:
   postprovision:
     posix:
       shell: sh
       continueOnError: true
       interactive: false
-      run: |
-        existing=$(az storage blob list --account-name "$OUTPUT_STORAGE_ACCOUNT" --auth-mode login -c policies --query "length(@)" -o tsv 2>/dev/null || echo 0)
-        if [ "${existing:-0}" = "0" ]; then
-          az storage blob upload-batch --account-name "$OUTPUT_STORAGE_ACCOUNT" --auth-mode login -d policies -s src/policies --pattern "*.md" --only-show-errors
-          echo "Seeded expense policies to '$OUTPUT_STORAGE_ACCOUNT/policies'."
-        else
-          echo "Policies already present in '$OUTPUT_STORAGE_ACCOUNT/policies' ($existing); skipping seed."
-        fi
+      run: uv run scripts/setup_demo.py seed-policies
     windows:
       shell: pwsh
       continueOnError: true
       interactive: false
-      run: |
-        $existing = az storage blob list --account-name $env:OUTPUT_STORAGE_ACCOUNT --auth-mode login -c policies --query "length(@)" -o tsv 2>$null
-        if (-not $existing -or $existing -eq "0") {
-          az storage blob upload-batch --account-name $env:OUTPUT_STORAGE_ACCOUNT --auth-mode login -d policies -s src/policies --pattern "*.md" --only-show-errors
-          Write-Host "Seeded expense policies to '$($env:OUTPUT_STORAGE_ACCOUNT)/policies'."
-        } else {
-          Write-Host "Policies already present in '$($env:OUTPUT_STORAGE_ACCOUNT)/policies' ($existing); skipping seed."
-        }
-  # After the app is deployed, drop the three $450 sample requests (travel, equipment, and a
-  # client dinner) onto the input queue so the customer sees the multi-policy behavior — the
-  # same amount routed three different ways — without running anything by hand. Uses the az CLI
-  # (no Python packages) over the deployer's Entra identity. It only sends when the output
-  # queues are empty, so re-running `azd up` won't pile on duplicates, and continueOnError keeps
-  # a cold start or RBAC-propagation hiccup from failing the deploy.
+      run: uv run scripts/setup_demo.py seed-policies
   postup:
     posix:
       shell: sh
       continueOnError: true
       interactive: false
-      run: |
-        pending=0
-        for q in expense-approved expense-review expense-flagged; do
-          n=$(az storage message peek --account-name "$OUTPUT_STORAGE_ACCOUNT" --auth-mode login --queue-name "$q" --num-messages 1 --query "length(@)" -o tsv 2>/dev/null || echo 0)
-          pending=$((pending + ${n:-0}))
-        done
-        if [ "${pending:-0}" = "0" ]; then
-          for s in travel equipment client-dinner; do
-            az storage message put --account-name "$OUTPUT_STORAGE_ACCOUNT" --auth-mode login --queue-name expense-requests --content "$(cat samples/$s.txt)" --only-show-errors >/dev/null
-          done
-          echo "Sent 3 sample expense requests ('\$450' travel, equipment, client dinner) to 'expense-requests'; decisions will land on the output queues shortly. Read them with: uv run scripts/read_decision.py --queue all --peek --cloud"
-        else
-          echo "Output queues already contain decisions; skipping the sample send."
-        fi
+      run: uv run scripts/setup_demo.py send-samples
     windows:
       shell: pwsh
       continueOnError: true
       interactive: false
-      run: |
-        $pending = 0
-        foreach ($q in @('expense-approved','expense-review','expense-flagged')) {
-          $n = az storage message peek --account-name $env:OUTPUT_STORAGE_ACCOUNT --auth-mode login --queue-name $q --num-messages 1 --query "length(@)" -o tsv 2>$null
-          if ($n) { $pending += [int]$n }
-        }
-        if ($pending -eq 0) {
-          foreach ($s in @('travel','equipment','client-dinner')) {
-            az storage message put --account-name $env:OUTPUT_STORAGE_ACCOUNT --auth-mode login --queue-name expense-requests --content (Get-Content -Raw "samples/$s.txt") --only-show-errors | Out-Null
-          }
-          Write-Host "Sent 3 sample expense requests ('`$450' travel, equipment, client dinner) to 'expense-requests'; decisions will land on the output queues shortly. Read them with: uv run scripts/read_decision.py --queue all --peek --cloud"
-        } else {
-          Write-Host "Output queues already contain decisions; skipping the sample send."
-        }
+      run: uv run scripts/setup_demo.py send-samples

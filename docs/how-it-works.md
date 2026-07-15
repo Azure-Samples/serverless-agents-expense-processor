@@ -122,8 +122,8 @@ Entra-authenticated.
 
 ## Under the hood: message encoding
 
-The project sends **raw text** (not base64) so messages are human-readable in the portal and via
-`az storage message put`. Three settings make that work end to end:
+The project sends **raw text** (not base64) so messages are human-readable in the portal. Three
+settings make that work end to end:
 
 - `host.json` → `extensions.queues.messageEncoding: "none"`: the host passes the queue text through
   unchanged.
