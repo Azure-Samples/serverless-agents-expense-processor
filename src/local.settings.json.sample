@@ -19,6 +19,12 @@
     "//output4": "fallback queue-endpoint hint for that cloud managed-identity path and is unused locally.",
     "OUTPUT_STORAGE_ACCOUNT": "localdev",
 
+    "//policy": "The get_expense_policy tool reads the approval policy document from Blob Storage",
+    "//policy2": "(this container + blob). Locally it seeds the bundled src/policies/expense-policy.md",
+    "//policy3": "into Azurite on first run; replace it with scripts/set_policy.py to change routing.",
+    "POLICY_CONTAINER": "policies",
+    "POLICY_BLOB": "expense-policy.md",
+
     "//logs": "Include the agent's full response text in the host logs so the decision is visible.",
     "ENABLE_SENSITIVE_DATA": "true",
 

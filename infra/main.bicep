@@ -71,6 +71,12 @@ var outputQueueNames = [
 ]
 var allQueueNames = union([inputQueueName], outputQueueNames)
 
+// Blob container + blob that hold the expense-approval policy document the agent reads at
+// decision time (see src/tools/get_policy.py). The blob is seeded on first run, so the
+// container is all the infra needs to provision.
+var policyContainerName = 'policies'
+var policyBlobName = 'expense-policy.md'
+
 // Resource Group
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: '${abbrs.resourcesResourceGroups}${environmentName}'
@@ -149,6 +155,10 @@ module api './app/api.bicep' = {
       // queues via the Azure Queue Storage SDK, authenticating with this managed identity
       // (AZURE_CLIENT_ID). OUTPUT_STORAGE_ACCOUNT is the fallback queue-endpoint hint.
       OUTPUT_STORAGE_ACCOUNT: storage.outputs.name
+      // get_expense_policy (src/tools/get_policy.py) reads the approval policy from this blob
+      // container + blob on the same account (managed identity in the cloud).
+      POLICY_CONTAINER: policyContainerName
+      POLICY_BLOB: policyBlobName
       ENABLE_MULTIPLATFORM_BUILD: 'true'
       PYTHON_ENABLE_INIT_INDEXING: '1'
     }
@@ -176,6 +186,7 @@ module storage 'br/public:avm/res/storage/storage-account:0.8.3' = {
     blobServices: {
       containers: [
         { name: deploymentStorageContainerName }
+        { name: policyContainerName }
       ]
     }
     minimumTlsVersion: 'TLS1_2'
