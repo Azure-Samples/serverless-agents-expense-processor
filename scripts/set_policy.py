@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#     "azure-storage-blob>=12.19",
+#     "azure-identity>=1.16",
+# ]
+# ///
 """Show, list, seed, or replace the expense-approval policy documents the agent reads.
 
 The agent picks a policy per request from a set of documents in the `policies` blob
@@ -15,20 +22,20 @@ Blob Data Contributor" role, which azd grants the deployer).
 Examples
 --------
     # List the policies currently in effect (name + what each covers)
-    python scripts/set_policy.py --list --cloud
+    uv run scripts/set_policy.py --list --cloud
 
     # Show one policy
-    python scripts/set_policy.py --show travel-policy.md --cloud
+    uv run scripts/set_policy.py --show travel-policy.md --cloud
 
     # Swap in a stricter TRAVEL policy, then re-send a $450 flight and watch it flip
     # approve -> review — while meals/equipment are unaffected
-    python scripts/set_policy.py --file samples/strict-travel-policy.md --name travel-policy.md --cloud
-    python scripts/send_expense.py --file samples/travel.txt --cloud
-    python scripts/read_decision.py --queue all --peek --cloud
+    uv run scripts/set_policy.py --file samples/strict-travel-policy.md --name travel-policy.md --cloud
+    uv run scripts/send_expense.py --file samples/travel.txt --cloud
+    uv run scripts/read_decision.py --queue all --peek --cloud
 
     # Restore the shipped travel policy (or re-seed everything)
-    python scripts/set_policy.py --file src/policies/travel-policy.md --cloud
-    python scripts/set_policy.py --seed --cloud
+    uv run scripts/set_policy.py --file src/policies/travel-policy.md --cloud
+    uv run scripts/set_policy.py --seed --cloud
 """
 from __future__ import annotations
 

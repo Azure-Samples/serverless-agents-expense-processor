@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#     "azure-storage-queue>=12.9",
+#     "azure-identity>=1.16",
+# ]
+# ///
 """Drop an expense/order request (free text or JSON) on the expense-requests queue.
 
 By default it targets local Azurite (AzureWebJobsStorage=UseDevelopmentStorage=true),
@@ -8,25 +15,25 @@ the queue still calls your configured Azure OpenAI / Foundry model to reason ove
 Examples
 --------
     # Send one of the bundled samples (mixed formats: text, JSON, EUR, cash advance, ...)
-    python scripts/send_expense.py --file samples/approve.txt
-    python scripts/send_expense.py --file samples/route.json
-    python scripts/send_expense.py --file samples/cash-advance.txt
+    uv run scripts/send_expense.py --file samples/approve.txt
+    uv run scripts/send_expense.py --file samples/route.json
+    uv run scripts/send_expense.py --file samples/cash-advance.txt
 
     # Send free text or inline JSON directly — the agent extracts the details either way
-    python scripts/send_expense.py "lunch with the team ran about $45"
-    python scripts/send_expense.py '{"description":"team lunch","amount":45,"currency":"USD"}'
+    uv run scripts/send_expense.py "lunch with the team ran about $45"
+    uv run scripts/send_expense.py '{"description":"team lunch","amount":45,"currency":"USD"}'
 
     # Generate a message from just an amount (quick way to prove the amount drives the decision)
-    python scripts/send_expense.py --amount 45
-    python scripts/send_expense.py --amount 5000
+    uv run scripts/send_expense.py --amount 45
+    uv run scripts/send_expense.py --amount 5000
 
     # Against the DEPLOYED account (Entra ID) — auto-resolves the queue endpoint from your
     # azd env (OUTPUT_STORAGE_ACCOUNT). Requires `az login`; the signed-in user needs the
     # "Storage Queue Data Message Sender" (or Contributor) role on the account.
-    python scripts/send_expense.py --amount 250 --cloud
+    uv run scripts/send_expense.py --amount 250 --cloud
 
     # Or point at a specific account explicitly:
-    python scripts/send_expense.py --file samples/route.json \
+    uv run scripts/send_expense.py --file samples/route.json \
         --account-url https://<storageaccount>.queue.core.windows.net
 """
 from __future__ import annotations

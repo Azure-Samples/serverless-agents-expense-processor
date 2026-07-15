@@ -1,16 +1,45 @@
 # Local settings & secrets — never commit
 src/local.settings.json
 local.settings.json
+.env
+.env.*
+!.env.example
 *.key
+*.pem
+*.p12
+*.pfx
+*.publishsettings
+*.log
 
-# Python
+# Python / uv
 .venv/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+# requirements.txt is generated from src/pyproject.toml + src/uv.lock by the azd
+# `prepackage` hook (uv export); dependencies are edited in pyproject.toml, not here.
+src/requirements.txt
 
-# macOS
+# Azurite
+.azurite/
+__azurite_db_*__.json
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
+
+# OS / editor
 .DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
 
 # Azure Functions
 bin/
