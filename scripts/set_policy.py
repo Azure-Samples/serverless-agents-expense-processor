@@ -1,66 +1,95 @@
 #!/usr/bin/env python3
-"""Show or replace the expense-approval policy document the agent reads at decision time.
+"""Show, list, seed, or replace the expense-approval policy documents the agent reads.
 
-The policy lives as a blob (`policies/expense-policy.md`) in the same storage account as the
-queues. Because the agent fetches it on every run, replacing the blob changes how requests are
-routed with **no code change and no redeploy** — send the same expense before and after and
-watch the decision follow the policy.
+The agent picks a policy per request from a set of documents in the `policies` blob
+container (one general policy plus category-specific ones — travel, meals &
+entertainment, equipment & software). Because the agent fetches the chosen policy on
+every run, replacing a document changes how the matching requests are routed with **no
+code change and no redeploy** — and swapping a single category's policy reroutes only
+that category.
 
-By default this targets local Azurite (AzureWebJobsStorage=UseDevelopmentStorage=true). Use
-``--cloud`` to target the deployed storage account over Entra ID (needs the "Storage Blob Data
-Contributor" role, which azd grants the deployer).
+By default this targets local Azurite (AzureWebJobsStorage=UseDevelopmentStorage=true).
+Use ``--cloud`` to target the deployed storage account over Entra ID (needs the "Storage
+Blob Data Contributor" role, which azd grants the deployer).
 
 Examples
 --------
-    # Show the policy currently in effect
-    python scripts/set_policy.py --show
-    python scripts/set_policy.py --show --cloud
+    # List the policies currently in effect (name + what each covers)
+    python scripts/set_policy.py --list --cloud
 
-    # Swap in the stricter policy, then re-send a $45 lunch and watch it flip approve -> review
-    python scripts/set_policy.py --file samples/strict-policy.md --cloud
-    python scripts/send_expense.py --file samples/approve.txt --cloud
+    # Show one policy
+    python scripts/set_policy.py --show travel-policy.md --cloud
+
+    # Swap in a stricter TRAVEL policy, then re-send a $450 flight and watch it flip
+    # approve -> review — while meals/equipment are unaffected
+    python scripts/set_policy.py --file samples/strict-travel-policy.md --name travel-policy.md --cloud
+    python scripts/send_expense.py --file samples/travel.txt --cloud
     python scripts/read_decision.py --queue all --peek --cloud
 
-    # Restore the default policy
-    python scripts/set_policy.py --file src/policies/expense-policy.md --cloud
+    # Restore the shipped travel policy (or re-seed everything)
+    python scripts/set_policy.py --file src/policies/travel-policy.md --cloud
+    python scripts/set_policy.py --seed --cloud
 """
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from azure.storage.blob import BlobClient
+from azure.storage.blob import ContainerClient
 
 from _cloud import resolve_blob_account_url
 
 DEV_CONNECTION_STRING = "UseDevelopmentStorage=true"
+DEFAULT_POLICY = os.environ.get("POLICY_BLOB", "general-expense-policy.md")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BUNDLED_DIR = os.path.join(REPO_ROOT, "src", "policies")
+
+_APPLIES_TO_RE = re.compile(r"^\*\*Applies to:\*\*\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 
-def build_blob_client(args: argparse.Namespace) -> BlobClient:
-    """Create a BlobClient from either an account URL (Entra ID) or a connection string."""
+def _scope_of(text: str) -> str:
+    match = _APPLIES_TO_RE.search(text)
+    return re.sub(r"\s+", " ", match.group(1)).strip() if match else ""
+
+
+def build_container_client(args: argparse.Namespace) -> ContainerClient:
+    """Create a ContainerClient from an account URL (Entra ID) or a connection string."""
     if args.account_url:
         from azure.identity import DefaultAzureCredential
 
-        return BlobClient(
+        return ContainerClient(
             account_url=args.account_url,
             container_name=args.container,
-            blob_name=args.blob,
             credential=DefaultAzureCredential(),
         )
-    return BlobClient.from_connection_string(
-        args.connection_string, container_name=args.container, blob_name=args.blob
-    )
+    return ContainerClient.from_connection_string(args.connection_string, args.container)
+
+
+def _ensure_container(container: ContainerClient) -> None:
+    try:
+        container.create_container()
+    except Exception:
+        pass  # already exists
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--show", action="store_true", help="Print the current policy and exit.")
-    parser.add_argument("--file", "-f", help="Path to a policy document (.md/.txt) to upload.")
+    parser.add_argument("--list", action="store_true", help="List the policies in the container and exit.")
+    parser.add_argument(
+        "--show",
+        nargs="?",
+        const=DEFAULT_POLICY,
+        metavar="NAME",
+        help=f"Print a policy document (default: {DEFAULT_POLICY}) and exit.",
+    )
+    parser.add_argument("--file", "-f", help="Path to a policy document (.md) to upload.")
+    parser.add_argument("--name", help="Blob name to upload --file as (default: the file's basename).")
+    parser.add_argument("--seed", action="store_true", help="Upload every bundled src/policies/*.md document.")
     parser.add_argument("--container", default=os.environ.get("POLICY_CONTAINER", "policies"), help="Blob container.")
-    parser.add_argument("--blob", default=os.environ.get("POLICY_BLOB", "expense-policy.md"), help="Blob name.")
     parser.add_argument(
         "--connection-string",
         default=os.environ.get("AzureWebJobsStorage", DEV_CONNECTION_STRING),
@@ -89,31 +118,43 @@ def main() -> int:
                 "or pass --account-url https://<acct>.blob.core.windows.net explicitly."
             )
 
-    if not args.show and not args.file:
-        raise SystemExit("Nothing to do: pass --show to read, or --file PATH to upload a policy.")
+    if not (args.list or args.show is not None or args.file or args.seed):
+        raise SystemExit(
+            "Nothing to do. Use --list, --show [NAME], --file PATH [--name NAME], or --seed."
+        )
 
-    client = build_blob_client(args)
+    container = build_container_client(args)
     target = args.account_url or "Azurite"
 
+    if args.seed:
+        _ensure_container(container)
+        names = sorted(f for f in os.listdir(BUNDLED_DIR) if f.endswith(".md"))
+        for name in names:
+            with open(os.path.join(BUNDLED_DIR, name), "r", encoding="utf-8") as handle:
+                container.upload_blob(name=name, data=handle.read().encode("utf-8"), overwrite=True)
+        print(f"Seeded {len(names)} bundled polic{'y' if len(names) == 1 else 'ies'} -> {args.container} ({target})")
+
     if args.file:
-        text = open(args.file, "r", encoding="utf-8").read()
-        # Locally the container may not exist yet; create it. In the cloud it is provisioned by
-        # azd, and the upload will find it.
-        if not args.account_url:
-            from azure.storage.blob import ContainerClient
+        blob_name = args.name or os.path.basename(args.file)
+        with open(args.file, "r", encoding="utf-8") as handle:
+            text = handle.read()
+        _ensure_container(container)
+        container.upload_blob(name=blob_name, data=text.encode("utf-8"), overwrite=True)
+        print(f"Uploaded '{args.file}' -> {args.container}/{blob_name} ({target}, {len(text)} bytes)")
 
-            try:
-                ContainerClient.from_connection_string(
-                    args.connection_string, args.container
-                ).create_container()
-            except Exception:
-                pass  # already exists
-        client.upload_blob(text.encode("utf-8"), overwrite=True)
-        print(f"Uploaded '{args.file}' -> {args.container}/{args.blob} ({target}, {len(text)} bytes)")
+    if args.list:
+        print(f"--- policies in {args.container} ({target}) ---")
+        rows = []
+        for blob in container.list_blobs():
+            text = container.download_blob(blob.name).readall().decode("utf-8")
+            rows.append((blob.name, _scope_of(text)))
+        width = max((len(name) for name, _ in rows), default=0)
+        for name, scope in sorted(rows):
+            print(f"  {name:<{width}}  {scope}")
 
-    if args.show:
-        text = client.download_blob().readall().decode("utf-8")
-        print(f"--- {args.container}/{args.blob} ({target}) ---")
+    if args.show is not None:
+        text = container.download_blob(args.show).readall().decode("utf-8")
+        print(f"--- {args.container}/{args.show} ({target}) ---")
         print(text)
 
     return 0

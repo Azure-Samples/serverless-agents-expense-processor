@@ -3,10 +3,11 @@
 azurefunctions-agents-runtime[monitor]==0.1.0b6
 
 # The route_expense_decision tool (src/tools/route_decision.py) writes the agent's decision to the
-# destination queue with the Azure Queue Storage SDK, and get_expense_policy (src/tools/get_policy.py)
-# reads the approval policy document from Blob Storage. In the cloud both authenticate with the
-# Function app's managed identity (DefaultAzureCredential); locally they use the Azurite connection
-# string. The demo helper scripts declare their own deps in scripts/requirements.txt.
+# destination queue with the Azure Queue Storage SDK, and the policy tools (src/tools/list_policies.py
+# + get_policy.py, sharing src/tools/_policy_store.py) list and read the approval policy documents from
+# Blob Storage. In the cloud all authenticate with the Function app's managed identity
+# (DefaultAzureCredential); locally they use the Azurite connection string. The demo helper scripts
+# declare their own deps in scripts/requirements.txt.
 azure-storage-queue>=12.17.0
 azure-storage-blob>=12.19.0
 azure-identity>=1.19.0

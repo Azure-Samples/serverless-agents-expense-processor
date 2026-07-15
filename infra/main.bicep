@@ -71,11 +71,12 @@ var outputQueueNames = [
 ]
 var allQueueNames = union([inputQueueName], outputQueueNames)
 
-// Blob container + blob that hold the expense-approval policy document the agent reads at
-// decision time (see src/tools/get_policy.py). The blob is seeded on first run, so the
-// container is all the infra needs to provision.
+// Blob container that holds the expense-approval policy documents the agent chooses among at
+// decision time (a general policy plus category-specific ones — see src/tools/). The documents
+// are seeded on first run, so the empty container is all the infra needs to provision.
+// POLICY_BLOB is the fallback/general policy used when a request matches no specific policy.
 var policyContainerName = 'policies'
-var policyBlobName = 'expense-policy.md'
+var policyBlobName = 'general-expense-policy.md'
 
 // Resource Group
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
@@ -155,8 +156,9 @@ module api './app/api.bicep' = {
       // queues via the Azure Queue Storage SDK, authenticating with this managed identity
       // (AZURE_CLIENT_ID). OUTPUT_STORAGE_ACCOUNT is the fallback queue-endpoint hint.
       OUTPUT_STORAGE_ACCOUNT: storage.outputs.name
-      // get_expense_policy (src/tools/get_policy.py) reads the approval policy from this blob
-      // container + blob on the same account (managed identity in the cloud).
+      // The policy tools (src/tools/list_policies.py + get_policy.py) read the approval policy
+      // documents from this blob container on the same account (managed identity in the cloud);
+      // POLICY_BLOB names the general/fallback policy used when no specific policy matches.
       POLICY_CONTAINER: policyContainerName
       POLICY_BLOB: policyBlobName
       ENABLE_MULTIPLATFORM_BUILD: 'true'
