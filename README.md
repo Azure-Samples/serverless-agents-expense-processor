@@ -120,7 +120,9 @@ rules engine; the agent does the work in eight steps:
 
 The rules come from a set of markdown documents in the **[`src/policies/`](src/policies/)** folder,
 stored as blobs in the `policies` container on the same storage account as the queues. The bundled
-documents are **seeded automatically on first run**, so a fresh deploy works out of the box. Each
+documents are **seeded automatically at deploy time** — an `azd` post-provision hook uploads them
+right after the storage account is created (and the agent re-seeds on its first run if the container
+is ever empty), so a fresh deploy works out of the box. Each
 document starts with an `**Applies to:**` line that the `list_expense_policies` tool surfaces as the
 policy's scope, which is how the agent knows which one to fetch.
 
@@ -210,6 +212,11 @@ Entra-authenticated.
 Key values are printed as `azd` outputs and saved to `.azure/<env>/.env` (for example
 `OUTPUT_STORAGE_ACCOUNT`, `AZURE_FUNCTION_NAME`, and `INPUT_QUEUE_NAME`).
 
+After provisioning, an `azd` **post-provision hook** ([`azure.yaml`](azure.yaml)) uploads the bundled
+policy documents into the `policies` container so they're in place before you send anything — no
+manual seeding. It seeds only when the container is empty, so re-provisioning never overwrites a
+policy you've edited.
+
 ---
 
 ## Repo layout
@@ -217,7 +224,7 @@ Key values are printed as `azd` outputs and saved to `.azure/<env>/.env` (for ex
 ```
 src/
   expense_processor.agent.md   # the agent: extract -> list -> select -> fetch -> apply -> route (the star of the show)
-  policies/                    # the policy library, seeded to Blob Storage on first run
+  policies/                    # the policy library, seeded to Blob Storage at deploy time
     general-expense-policy.md  #   fallback / catch-all (also the POLICY_BLOB default)
     travel-policy.md           #   flights, hotels, rail, taxis, car rental, mileage
     meals-entertainment-policy.md  # meals, catering, client entertainment
