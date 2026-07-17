@@ -6,7 +6,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     # Standalone Azure Functions serverless agents runtime + Azure Monitor exporter.
     # Distribution: azurefunctions-agents-runtime; import package: azure_functions_agents.
-    "azurefunctions-agents-runtime[monitor]==0.1.0b6",
+    "azurefunctions-agents-runtime[monitor]==0.1.0b8",
     # route_expense_decision writes decisions to a queue; the policy tools read the policy
     # documents from Blob Storage. In the cloud all authenticate with the app's managed
     # identity (DefaultAzureCredential); locally they use the Azurite connection string.

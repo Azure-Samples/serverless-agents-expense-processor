@@ -128,11 +128,8 @@ settings make that work end to end:
 - `host.json` → `extensions.queues.messageEncoding: "none"`: the host passes the queue text through
   unchanged.
 - The agent trigger sets `data_type: string`.
-- [`src/function_app.py`](../src/function_app.py) installs a small **compatibility shim**: the Azure
-  Functions Python worker hands the trigger a `QueueMessage` binding object, which the runtime would
-  otherwise stringify to `<azure.QueueMessage …>`. The shim pulls the real body out of any binding
-  object that exposes `get_body()` (queues, Service Bus, Event Hubs), so the agent sees the actual
-  message text.
+- Serverless Agents Runtime `0.1.0b8` serializes the `QueueMessage` body and metadata before adding
+  them to the agent prompt.
 
 ## Repo layout
 
@@ -150,7 +147,7 @@ src/
     get_policy.py              # custom tool: reads one chosen policy document (managed identity)
     route_decision.py          # custom tool: writes the decision to a queue (managed identity)
     _policy_store.py           # shared blob-storage helpers for the policy tools (not a tool itself)
-  function_app.py              # entry point + a small runtime compatibility shim
+  function_app.py              # standard serverless agents runtime entry point
   agents.config.yaml           # runtime defaults (timeout)
   host.json                    # queue messageEncoding + logging config
   pyproject.toml               # function app dependencies (uv is the source of truth)
